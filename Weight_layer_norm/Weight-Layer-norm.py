@@ -15,6 +15,17 @@ from sklearn.metrics import roc_curve, auc
 # the size of the images in the PCAM dataset
 IMAGE_SIZE = 96
 
+def load_init_data(amount,path):
+    listing = os.listdir(path)
+    imlist = []
+    n = 0
+    while n < amount:
+        file = listing[n]
+        im = plt.imread(path + file)
+        imlist.append(im)
+        n = n + 1
+    return imlist
+
 
 def get_pcam_generators(base_dir, train_batch_size=32, val_batch_size=32):
     # dataset parameters
@@ -54,7 +65,13 @@ def get_model(first_kernel=(3, 3), second_kernel = (6,6), pool_size=(4, 4), firs
     model.add(Flatten())
 
     # compile the model
-    model.compile(SGD(lr=0.01, momentum=0.95), loss='binary_crossentropy', metrics=['accuracy'])
+    from Weight_layer_norm.weightnorm import SGDWithWeightnorm
+    sgd_wn = SGDWithWeightnorm(lr=0.01, decay=0, momentum=0.9, nesterov=False)
+    model.compile(loss='categorical_crossentropy', optimizer=sgd_wn, metrics=['accuracy'])
+
+    X_train = load_init_data(100, 'C:/Users/20172960/Documents/Project imaging Data/Data/train/0/')
+    from Weight_layer_norm.weightnorm import data_based_init
+    data_based_init(model, X_train)
 
     return model
 
@@ -112,4 +129,4 @@ def ROC_analysis(model, test_gen):
 
 
 ##
-model = model_training(1,'test1','logNorm')
+model = model_training(1,'Weightnorm1','logWL')
