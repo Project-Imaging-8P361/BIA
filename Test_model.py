@@ -17,7 +17,6 @@ from keras.callbacks import ModelCheckpoint, TensorBoard
 
 # unused for now, to be used for ROC analysis
 from sklearn.metrics import roc_curve, auc
-#Test push
 
 # the size of the images in the PCAM dataset
 IMAGE_SIZE = 96
