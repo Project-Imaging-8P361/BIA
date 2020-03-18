@@ -2,13 +2,10 @@ import os
 
 import matplotlib.pyplot as plt
 
-from keras.preprocessing.image import ImageDataGenerator
-from keras.models import Sequential
-from keras.layers import Flatten
-from keras.layers import Conv2D, MaxPool2D
-from keras.callbacks import ModelCheckpoint, TensorBoard
-from keras_layer_normalization import LayerNormalization
-from keras.optimizers import SGD
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
+from tensorflow.keras.optimizers import SGD
 
 # unused for now, to be used for ROC analysis
 from sklearn.metrics import roc_curve, auc
@@ -42,24 +39,22 @@ def get_pcam_generators(base_dir, train_batch_size=32, val_batch_size=32):
 
 def get_model(first_kernel=(3, 3), second_kernel = (6,6), pool_size=(4, 4), first_filters=32, second_filters=64, third_filters=64):
     # build the model
-    model = Sequential()
-
-    model.add(Conv2D(first_filters, first_kernel, activation='relu', padding='same', input_shape=(IMAGE_SIZE, IMAGE_SIZE, 3)))
-    model.add(MaxPool2D(pool_size=pool_size))
-
-    model.add(LayerNormalization())
-    model.add(Conv2D(second_filters, first_kernel, activation='relu', padding='same'))
-    model.add(MaxPool2D(pool_size=pool_size))
-
-    model.add(LayerNormalization())
-    model.add(Conv2D(third_filters, second_kernel, activation='relu', padding='valid'))
-
-    model.add(LayerNormalization())
-    model.add(Conv2D(1, (1, 1), activation='sigmoid', padding='valid'))
-    model.add(Flatten())
+    model = tf.keras.models.Sequential([
+        tf.keras.layers.Conv2D(first_filters, first_kernel, activation='relu', padding='same',input_shape=(IMAGE_SIZE, IMAGE_SIZE, 3)),
+        tf.keras.layers.LayerNormalization(),
+        tf.keras.layers.MaxPool2D(pool_size=pool_size),
+        tf.keras.layers.Conv2D(second_filters, first_kernel, activation='relu', padding='same'),
+        tf.keras.layers.LayerNormalization(),
+        tf.keras.layers.MaxPool2D(pool_size=pool_size),
+        tf.keras.layers.Conv2D(third_filters, second_kernel, activation='relu', padding='valid'),
+        tf.keras.layers.LayerNormalization(),
+        tf.keras.layers.Conv2D(1, (1, 1), activation='sigmoid', padding='valid'),
+        tf.keras.layers.Flatten(),
+    ])
 
     # compile the model
-    model.compile(SGD(lr=0.01, momentum=0.95), loss = 'binary_crossentropy', metrics=['accuracy'])
+    optimizer = SGD(learning_rate=0.01, momentum=0.05, name='SGD')
+    model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
 
     return model
 
@@ -89,7 +84,7 @@ def model_training(epoch, model_name, log_name):
     train_steps = train_gen.n // train_gen.batch_size
     val_steps = val_gen.n // val_gen.batch_size
 
-    history = model.fit_generator(train_gen, steps_per_epoch=train_steps,
+    history = model.fit(train_gen, steps_per_epoch=train_steps,
                                   validation_data=val_gen,
                                   validation_steps=val_steps,
                                   epochs=epoch,
@@ -116,4 +111,4 @@ def ROC_analysis(model, test_gen):
 
 
 ##
-model_training(1,'Layernorm2','logWL')
+model_training(1,'Layernorm3_tf2','logWL')
