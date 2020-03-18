@@ -1,11 +1,10 @@
 import os
 
 import matplotlib.pyplot as plt
-
 import tensorflow as tf
+from tensorflow.keras.optimizers import SGD
 import tensorflow_addons as tfa
 
-from tensorflow.keras.optimizers import SGD
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
 
