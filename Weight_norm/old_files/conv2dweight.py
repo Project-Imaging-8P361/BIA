@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 
-class Conv2DWeightNorm(tf.layers.Conv2D):
+class Conv2DWeightNorm(tf.keras.layers.Conv2D):
 
     def build(self, input_shape):
         self.wn_g = self.add_weight(

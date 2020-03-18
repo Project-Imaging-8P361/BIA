@@ -4,17 +4,28 @@ import matplotlib.pyplot as plt
 
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Flatten, Lambda
-from tensorflow.keras.layers import Conv2D, MaxPool2D, Dense
+from tensorflow.keras.layers import Flatten
+from tensorflow.keras.layers import Conv2D, MaxPool2D
 from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
-from tensorflow.keras.optimizers import SGD
-from Weight_norm.conv2dweight import conv2d_weight_norm as Conv2DWeightNorm
 
 # unused for now, to be used for ROC analysis
 from sklearn.metrics import roc_curve, auc
 
 # the size of the images in the PCAM dataset
 IMAGE_SIZE = 96
+
+def load_init_data(amount,path):
+    listing = os.listdir(path)
+    imlist = []
+    n = 0
+    while n < amount:
+        file = listing[n]
+        im = plt.imread(path + file)
+        im = im.astype('float32')
+        im /= 255
+        imlist.append(im)
+        n = n + 1
+    return imlist
 
 
 def get_pcam_generators(base_dir, train_batch_size=32, val_batch_size=32):
@@ -42,29 +53,27 @@ def get_pcam_generators(base_dir, train_batch_size=32, val_batch_size=32):
 
 def get_model(first_kernel=(3, 3), second_kernel = (6,6), pool_size=(4, 4), first_filters=32, second_filters=64, third_filters=64):
     # build the model
-    def conv2dweight1(x):
-        return Conv2DWeightNorm(x, filters=first_filters, kernel_size=first_kernel, activation='relu', padding='same')[0]
-
-    def conv2dweight2(x):
-        return Conv2DWeightNorm(x, filters=second_filters, kernel_size=first_kernel, activation='relu', padding='same')
-
-    def conv2dweight3(x):
-        return Conv2DWeightNorm(x, filters=third_filters, kernel_size=second_kernel, activation='relu', padding='valid')
-
-
     model = Sequential()
 
-    model.add(Conv2D(filters=first_filters, kernel_size=first_kernel, activation='relu', padding='same', input_shape=(IMAGE_SIZE, IMAGE_SIZE, 3)))
+    model.add(Conv2D(first_filters, first_kernel, activation='relu', padding='same', input_shape=(IMAGE_SIZE, IMAGE_SIZE, 3)))
     model.add(MaxPool2D(pool_size=pool_size))
 
-    model.add(Lambda(conv2dweight2))
+    model.add(Conv2D(second_filters, first_kernel, activation='relu', padding='same'))
+    model.add(MaxPool2D(pool_size=pool_size))
 
-    model.add(Lambda(conv2dweight3))
+    model.add(Conv2D(third_filters, second_kernel, activation='relu', padding='valid'))
+    model.add(Conv2D(1, (1, 1), activation='sigmoid', padding='valid'))
     model.add(Flatten())
-    model.add(Dense(1, activation='sigmoid'))
-    model.summary()
+
     # compile the model
-    model.compile(SGD(lr=0.01, momentum=0.95), loss = 'binary_crossentropy', metrics=['accuracy'])
+    from Weight_norm.old_files.weightnorm import SGDWithWeightnorm
+    sgd_wn = SGDWithWeightnorm(lr=0.01, decay=0, momentum=0.9, nesterov=False)
+    model.compile(loss='binary_crossentropy', optimizer=sgd_wn, metrics=['accuracy'])
+
+    X_train = load_init_data(100, 'C:/Users/20172960/Documents/Project imaging Data/Data/train/0/')
+
+    from Weight_norm.old_files.weightnorm import data_based_init
+    data_based_init(model, X_train)
 
     return model
 
@@ -121,4 +130,4 @@ def ROC_analysis(model, test_gen):
 
 
 ##
-model_training(1,'Weightnorm2','logWL')
+model = model_training(1,'Weightnorm1','logWL')

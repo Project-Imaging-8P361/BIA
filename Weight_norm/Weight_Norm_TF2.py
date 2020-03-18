@@ -2,18 +2,30 @@ import os
 
 import matplotlib.pyplot as plt
 import tensorflow as tf
+from tensorflow.keras.optimizers import SGD
+import tensorflow_addons as tfa
 
-from keras.preprocessing.image import ImageDataGenerator
-
-from keras.callbacks import ModelCheckpoint, TensorBoard
-from keras.optimizers import SGD
-from Weight_norm.conv2dweight import Conv2DWeightNorm
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
 
 # unused for now, to be used for ROC analysis
 from sklearn.metrics import roc_curve, auc
 
 # the size of the images in the PCAM dataset
 IMAGE_SIZE = 96
+
+def load_init_data(amount,path):
+    listing = os.listdir(path)
+    imlist = []
+    n = 0
+    while n < amount:
+        file = listing[n]
+        im = plt.imread(path + file)
+        im = im.astype('float32')
+        im /= 255
+        imlist.append(im)
+        n = n + 1
+    return imlist
 
 
 def get_pcam_generators(base_dir, train_batch_size=32, val_batch_size=32):
@@ -41,20 +53,19 @@ def get_pcam_generators(base_dir, train_batch_size=32, val_batch_size=32):
 
 def get_model(first_kernel=(3, 3), second_kernel = (6,6), pool_size=(4, 4), first_filters=32, second_filters=64, third_filters=64):
     # build the model
-    def conv2dweight(x):
-        return Conv2DWeightNorm(x, p_ratio)[0]
     model = tf.keras.models.Sequential([
-        Conv2DWeightNorm(first_filters, first_kernel, activation = 'relu', padding = 'same', input_shape = (IMAGE_SIZE, IMAGE_SIZE, 3)),
-        tf.keras.layers.MaxPool2D(pool_size = pool_size),
-        Conv2DWeightNorm(second_filters, first_kernel, activation = 'relu', padding = 'same'),
-        tf.keras.layers.MaxPool2D(pool_size = pool_size),
-        Conv2DWeightNorm(third_filters, second_kernel, activation = 'relu', padding = 'valid'),
-        Conv2DWeightNorm(1, (1, 1), activation='sigmoid', padding='valid'),
+        tfa.layers.WeightNormalization(tf.keras.layers.Conv2D(first_filters, first_kernel, activation='relu', padding='same', input_shape=(IMAGE_SIZE, IMAGE_SIZE, 3))),
+        tf.keras.layers.MaxPool2D(pool_size=pool_size),
+        tfa.layers.WeightNormalization(tf.keras.layers.Conv2D(second_filters, first_kernel, activation='relu', padding='same')),
+        tf.keras.layers.MaxPool2D(pool_size=pool_size),
+        tfa.layers.WeightNormalization(tf.keras.layers.Conv2D(third_filters, second_kernel, activation='relu', padding='valid')),
+        tfa.layers.WeightNormalization(tf.keras.layers.Conv2D(1, (1, 1), activation='sigmoid', padding='valid')),
         tf.keras.layers.Flatten(),
     ])
 
     # compile the model
-    model.compile(SGD(lr=0.01, momentum=0.95), loss = 'binary_crossentropy', metrics=['accuracy'])
+    optimizer = SGD(learning_rate=0.01, momentum=0.05, name='SGD')
+    model.compile(optimizer = optimizer, loss='binary_crossentropy', metrics=['accuracy'])
 
     return model
 
@@ -79,12 +90,12 @@ def model_training(epoch, model_name, log_name):
     checkpoint = ModelCheckpoint(weights_filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
     tensorboard = TensorBoard(os.path.join(log_name, model_name))
     callbacks_list = [checkpoint, tensorboard]
-
+    print(val_gen.n)
     # train the model
-    train_steps = train_gen.n // train_gen.batch_size
-    val_steps = val_gen.n // val_gen.batch_size
+    train_steps = int(train_gen.n // train_gen.batch_size)
+    val_steps = int(val_gen.n // val_gen.batch_size)
 
-    history = model.fit_generator(train_gen, steps_per_epoch=train_steps,
+    history = model.fit(train_gen, steps_per_epoch=train_steps,
                                   validation_data=val_gen,
                                   validation_steps=val_steps,
                                   epochs=epoch,
@@ -111,4 +122,4 @@ def ROC_analysis(model, test_gen):
 
 
 ##
-model_training(1,'Weightnorm2','logWL')
+model = model_training(3,'Weightnorm2','logWL')
