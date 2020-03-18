@@ -8,12 +8,12 @@ import os
 
 import matplotlib.pyplot as plt
 
-from keras.preprocessing.image import ImageDataGenerator
-from keras.models import Sequential
-from keras.layers import Dense, Flatten
-from keras.layers import Conv2D, MaxPool2D
-from keras.optimizers import SGD
-from keras.callbacks import ModelCheckpoint, TensorBoard
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.layers import Conv2D, MaxPool2D
+from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
 
 # unused for now, to be used for ROC analysis
 from sklearn.metrics import roc_curve, auc
@@ -25,8 +25,8 @@ IMAGE_SIZE = 96
 def get_pcam_generators(base_dir, train_batch_size=32, val_batch_size=32):
 
     # dataset parameters
-    train_path = os.path.join(base_dir, 'train+val', 'train')
-    valid_path = os.path.join(base_dir, 'train+val', 'valid')
+    train_path = os.path.join(base_dir, 'train')
+    valid_path = os.path.join(base_dir, 'valid')
 
     RESCALING_FACTOR = 1./255
 
@@ -124,21 +124,13 @@ def ROC_analysis(model, test_gen):
     plt.fill_between(fpr,tpr, alpha = 0.1) #indicate AUC
     plt.text(0.8, 0.03, "AUC = " + str(round(roc_auc, 3)))
     
-#%%
-filepath = r'C:\Users\20164798\OneDrive - TU Eindhoven\UNI\BMT 3\Q3\OGO imaging\Data'
+##
+filepath = r'C:/Users/20172960/Documents/Project imaging Data/Data'
 train_gen, val_gen = get_pcam_generators(filepath)
 
 model1 = get_model(model_nr=1)
-model_training(model1, train_gen, val_gen, 'Model_1')
+model_training(model1, train_gen, val_gen, 'Model_1_tf2_1_0')
 ROC_analysis(model1, val_gen)
-
-model2 = get_model(model_nr=2)
-model_training(model2, train_gen, val_gen, 'Model_2')
-ROC_analysis(model2, val_gen)
-
-model3 = get_model(model_nr=3)
-model_training(model3, train_gen, val_gen, 'Model_3')
-ROC_analysis(model3, val_gen)
  
 
 
