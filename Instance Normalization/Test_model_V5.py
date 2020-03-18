@@ -1,0 +1,183 @@
+'''
+TU/e BME Project Imaging 2019
+Convolutional neural network for PCAM
+Author: Suzanne Wetstein
+'''
+import tensorflow as tf
+from tensorflow_addons.layers import InstanceNormalization
+
+import os
+
+import matplotlib.pyplot as plt
+
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.layers import Conv2D, MaxPool2D
+from tensorflow.keras.layers import Dropout
+from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
+
+# unused for now, to be used for ROC analysis
+from sklearn.metrics import roc_curve, auc
+
+
+# the size of the images in the PCAM dataset
+IMAGE_SIZE = 96
+
+#%%Get data generators
+def get_pcam_generators(base_dir, train_batch_size=32, val_batch_size=32):
+
+    # dataset parameters
+    train_path = os.path.join(base_dir, 'train+val', 'train')
+    valid_path = os.path.join(base_dir, 'train+val', 'valid')
+
+    RESCALING_FACTOR = 1./255
+
+    # instantiate data generators
+    datagen = ImageDataGenerator(rescale=RESCALING_FACTOR)
+
+    train_gen = datagen.flow_from_directory(train_path,
+                                            target_size=(IMAGE_SIZE, IMAGE_SIZE),
+                                            batch_size=train_batch_size,
+                                            class_mode='binary')
+
+    val_gen = datagen.flow_from_directory(valid_path,
+                                            target_size=(IMAGE_SIZE, IMAGE_SIZE),
+                                            batch_size=val_batch_size,
+                                            class_mode='binary', shuffle=False)
+
+    return train_gen, val_gen
+
+#%%Get Model
+def get_model(model_nr = 1, kernel_size=(3,3), pool_size=(4,4), first_filters=32, second_filters=64, conv=False):
+
+    # build the model
+    model = Sequential()
+    
+    if model_nr == 1:
+        model.add(Conv2D(first_filters, kernel_size, activation = 'relu', padding = 'same', input_shape = (IMAGE_SIZE, IMAGE_SIZE, 3)))
+        model.add(MaxPool2D(pool_size = pool_size))
+        model.add(Conv2D(second_filters, kernel_size, activation = 'relu', padding = 'same'))
+        model.add(MaxPool2D(pool_size = pool_size))
+        model.add(Conv2D(64, (6, 6), activation = 'relu', padding = 'valid'))   # Convolutional layer acting as fully connected layer (kernel size == input size)
+        model.add(Conv2D(1, (1, 1), activation='sigmoid', padding='valid'))     # Convolutional layer acting as fully connected output layer (kernel size == input size)
+        model.add(Flatten())                                                   # Flatten the (1,1,1) Result into (1)
+    elif model_nr == 2:
+        model.add(Conv2D(first_filters, kernel_size, activation = 'relu', padding = 'same', input_shape = (IMAGE_SIZE, IMAGE_SIZE, 3)))
+        model.add(MaxPool2D(pool_size = pool_size))
+        model.add(Conv2D(second_filters, kernel_size, activation = 'relu', padding = 'same'))
+        model.add(MaxPool2D(pool_size = pool_size))
+        model.add(Flatten())
+        model.add(Dense(64, activation = 'relu'))
+        model.add(Dense(1, activation = 'sigmoid'))
+    elif model_nr == 3:
+        model.add(Conv2D(first_filters, kernel_size, activation = 'relu', padding = 'same', input_shape = (IMAGE_SIZE, IMAGE_SIZE, 3)))
+        model.add(MaxPool2D(pool_size = pool_size))
+        model.add(Conv2D(second_filters, kernel_size, activation = 'relu', padding = 'same'))
+        model.add(MaxPool2D(pool_size = pool_size))
+        model.add(InstanceNormalization(axis=3, 
+                                        center=True, 
+                                        scale=True,
+                                        beta_initializer="random_uniform",
+                                        gamma_initializer="random_uniform"))
+        model.add(Conv2D(64, (6, 6), activation = 'relu', padding = 'valid'))   # Convolutional layer acting as fully connected layer (kernel size == input size)
+        model.add(Conv2D(1, (1, 1), activation='sigmoid', padding='valid'))     # Convolutional layer acting as fully connected output layer (kernel size == input size)
+        model.add(Flatten())
+    elif model_nr == 4:
+        model.add(Conv2D(filters=10, kernel_size=(3,3),data_format="channels_last"))
+        model.add(InstanceNormalization(axis=3, 
+                                        center=True, 
+                                        scale=True,
+                                        beta_initializer="random_uniform",
+                                        gamma_initializer="random_uniform"))
+        model.add(Flatten())
+        model.add(Dense(128, activation='relu'))
+        model.add(Dropout(0.2))
+        model.add(Dense(1, activation='softmax'))
+    else:
+        print("Invalid model nr. Please try again.")
+        return
+    
+     # compile the model
+    model.compile(SGD(lr=0.01, momentum=0.95), loss = 'binary_crossentropy', metrics=['accuracy'])
+    
+    return model
+
+#%%
+# get the model
+def model_training(model, train_gen, val_gen, model_name = 'my_first_cnn_model', verbose = 1):
+   
+    #for layer in model.layers:
+    #    print(layer.output_shape)
+    
+    # save the model and weights
+    model_filepath = model_name + '.json'
+    weights_filepath = model_name + '_weights.hdf5'
+    
+    model_json = model.to_json() # serialize model to JSON
+    with open(model_filepath, 'w') as json_file:
+        json_file.write(model_json)
+    
+    # define the model checkpoint and Tensorboard callbacks
+    checkpoint = ModelCheckpoint(weights_filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+    tensorboard = TensorBoard(os.path.join('logs', model_name))
+    callbacks_list = [checkpoint, tensorboard]
+    
+    # train the model
+    train_steps = train_gen.n//train_gen.batch_size
+    val_steps = val_gen.n//val_gen.batch_size
+    
+    history = model.fit_generator(train_gen, steps_per_epoch=train_steps,
+                        validation_data=val_gen,
+                        validation_steps=val_steps,
+                        epochs=10,
+                        callbacks=callbacks_list, 
+                        verbose = verbose)
+
+#%% ROC Analysis
+def ROC_analysis(model, test_gen):
+    
+    test_steps = test_gen.n//test_gen.batch_size
+    # ROC analysis
+    y_score = model.predict(test_gen, steps=test_steps) #get scores predicted by the model
+    y_truth = test_gen.classes #get the ground truths 
+    
+    fpr, tpr, tresholds = roc_curve(y_truth, y_score) #apply ROC analysis
+    roc_auc = auc(fpr, tpr) #calculate area under ROC curve
+    
+    #create ROC curve plot
+    plt.figure()
+    plt.plot(fpr, tpr, [0,1], [0,1], '--')
+    plt.xlabel("FPR")
+    plt.ylabel("TPR")
+    plt.xlim((0,1))
+    plt.ylim((0,1))
+    plt.fill_between(fpr,tpr, alpha = 0.1) #indicate AUC
+    plt.text(0.8, 0.03, "AUC = " + str(round(roc_auc, 3)))
+    return fpr, tpr, roc_auc
+
+    
+#%%
+filepath = r'C:\Users\20164798\OneDrive - TU Eindhoven\UNI\BMT 3\Q3\OGO imaging\Data'
+train_gen, val_gen = get_pcam_generators(filepath)
+
+model1 = get_model(model_nr=1)
+model_training(model1, train_gen, val_gen, 'Model_1', verbose=1)
+fpr_M1, tpr_M1, auc_M1 = ROC_analysis(model1, val_gen)
+
+model2 = get_model(model_nr=2)
+model_training(model2, train_gen, val_gen, 'Model_2', verbose=1)
+fpr_M2, tpr_M2, auc_M2 = ROC_analysis(model2, val_gen)
+
+model3 = get_model(model_nr=3)
+model_training(model3, train_gen, val_gen, 'Model_3', verbose=1)
+fpr_M3, tpr_M3, auc_M3 = ROC_analysis(model3, val_gen)
+
+model4 = get_model(model_nr=4)
+model_training(model4, train_gen, val_gen, 'Model_4', verbose=1)
+fpr_M4, tpr_M4, auc_M4 = ROC_analysis(model4, val_gen)
+
+
+
+
